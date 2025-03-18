@@ -24,7 +24,8 @@ https://github.com/INITIAL7664/ADNS-9800/blob/master/firmware.ino
 
 https://github.com/svofski/ADNS-9800-Energia/blob/master/ADNS-9800-Energia.ino
 
-'''
+```
+
 from machine import Pin, SPI
 import time
 
@@ -127,7 +128,7 @@ while True:
         print(f"Motion detected: ΔX={dx}, ΔY={dy}")
     time.sleep(0.1)
 
-'''
+```
 
 ## How to Use
 
@@ -153,6 +154,7 @@ Convert SROM File to Python Byte Array
 
 Run this Python script on your computer (not on the Pico!):
 
+```
 # Convert ADNS-9800 SROM binary to a Python byte array
 srom_filename = "ADNS9800_SROM.bin"
 
@@ -167,7 +169,7 @@ with open("srom_data.py", "w") as f:
     f.write(output)
 
 print("Conversion complete! The SROM data is saved in 'srom_data.py'.")
-
+```
 
 This script reads the binary file and converts it into a Python byte array.
 The output is stored in srom_data.py, which you can then upload to the Pico.
@@ -178,28 +180,29 @@ Modify your MicroPython script to import the SROM data instead of defining it ma
 
 Step 3: Modify the MicroPython Script to Use the SROM File
 Change this line in your MicroPython script:
-
+```
 srom_data = bytes([0x00] * 4094)  # Replace this with real SROM data
-
+```
 
 To this:
-
+```
 from srom_data import srom_data  # Import the converted SROM data
+```
 
 Alternative: Read Directly from an SROM File on an SD Card
 If you have an SD card connected to the Pico, you can store the ADNS9800_SROM.bin there and read it directly:
-
+```
 def load_srom_from_sd():
     with open("/sd/ADNS9800_SROM.bin", "rb") as f:
         return f.read()
 
 srom_data = load_srom_from_sd()
-
+```
 
 Final Steps
 Run your MicroPython script on the Pico.
 The SROM should now load properly, and the sensor should start tracking motion! 🚀
-
+```
 import os
 import sdcard
 import machine
@@ -240,7 +243,7 @@ if srom_data:
     print("SROM Data Ready to Upload to ADNS-9800!")
 else:
     print("Failed to load SROM file.")
-
+```
 
 4. Upload the SROM File to the SD Card
 
@@ -253,13 +256,13 @@ Insert the SD card into the Pico SD card module.
 Now, update your ADNS-9800 MicroPython script to read from the SD card:
 
 Replace this:
-
+```
 from srom_data import srom_data  # Import the SROM from a Python file
-
+```
 With this:
-
+```
 srom_data = load_srom_from_sd()
-
+```
 
 
 
