@@ -8,10 +8,7 @@ https://github.com/KMKfw/kmk_firmware/blob/main/kmk/modules/adns9800.py
 
 https://hackaday.com/tag/adns-9000/
 
-
 https://www.application-datasheet.com/pdf/broadcom/adns-6190-002.pdf   
-
-https://www.snapeda.com/parts/ADNS-9800/PixArt/datasheet/   
 
 https://www.tindie.com/products/citizenjoe/adns-9800-motion-sensor/   
 
