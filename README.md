@@ -4,6 +4,11 @@ Design for a device for mapping a slot car track by using a part from an optical
 
 ## Links
 
+https://github.com/KMKfw/kmk_firmware/blob/main/kmk/modules/adns9800.py
+
+https://hackaday.com/tag/adns-9000/
+
+
 https://www.application-datasheet.com/pdf/broadcom/adns-6190-002.pdf   
 
 https://www.snapeda.com/parts/ADNS-9800/PixArt/datasheet/   
@@ -23,6 +28,12 @@ https://www.instructables.com/Arduino-Tutorial-ADNS-9800-Laser-Mouse-Traveled-Di
 https://github.com/INITIAL7664/ADNS-9800/blob/master/firmware.ino
 
 https://github.com/svofski/ADNS-9800-Energia/blob/master/ADNS-9800-Energia.ino
+
+https://8051enthusiast.github.io/2020/04/14/001-USB_Firmware.html
+
+https://github.com/mrjohnk/ADNS-9800/tree/master
+
+https://github.com/joshuajnoble/ArduinoADNS-9800/blob/master/ADNS9800.ino
 
 ```
 
