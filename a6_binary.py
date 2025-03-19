@@ -1,10 +1,4 @@
-frame = bytes([0xA2,0x01,0x02,0x03,0x04])
-
-print(frame)
-
-frame = b'\xa2\x01\x02\x03\x04'
-
-print(frame)
+# Hacked from here https://github.com/mrjohnk/ADNS-9800
 
 frame = bytes([
 0x03,
