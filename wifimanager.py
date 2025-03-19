@@ -1,5 +1,8 @@
 import network
-import uasyncio as asyncio
+import asyncio
+import logging
+
+
 
 class WiFiManager:
     def __init__(self, networks):
