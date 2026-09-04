@@ -85,6 +85,46 @@ splice_len  = 10;          // rear_splice overlap length — shrunk to fit the r
 
 echo(str("usable length rear of the flare (splice + Pico zone) = ", flare_start - splice_len, " mm — Pico 2 W needs at least its short-axis dimension here since it's mounted rotated"));
 
+// ---- Second (rear) guide — DESIGN.md §7 --------------------------------
+// A dummy, mechanical-only guide behind the PMW3360, bracketing it between
+// two independently-pivoting slot-engaged points. The front guide (above)
+// keeps its stock role (slot engagement + power pickup via the braids);
+// this one carries no current — just a hard plastic pin, free to rotate in
+// its mount like the front guide's peg does. Its purpose is to make the
+// sensor section's orientation depend only on the slot's geometry, not on
+// the stock rear wheels' friction-dependent skid/slip through a corner,
+// which the fusion model (DESIGN.md §2/§6) doesn't otherwise account for.
+guide_slot_width_mm = 2.5;   // narrowest slot on the real track (given, not measured yet — confirm)
+guide_pin_width_mm  = 1.0;   // hardbody-style pin, narrower than the front guide's stock peg
+guide_clearance_mm  = (guide_slot_width_mm - guide_pin_width_mm) / 2;  // per side
+r_worst_mm          = 221.1; // tightest curve radius across ALL FOUR lanes (red), computed
+                              // directly from tmp/bolton-track.svg — NOT the ~370mm yellow-lane
+                              // figure used elsewhere in this project's simulation (DESIGN.md §7/§9)
+
+rear_guide_pin_dia = 1.2;                 // fits guide_slot_width_mm with clearance to spare
+// Squeezed between rear_splice() (ends at X=splice_len) and pico_mount()'s
+// board edge (starts at X=(splice_len+flare_start)/2 - pico_w/2 = 15.5) --
+// checked by direct bounding-box comparison, not by eye at this scale; only
+// a ~0.3mm window existed with a wider boss, hence the tighter +2mm margin
+// on boss_d below instead of the guide_flag_mount()'s +5mm.
+rear_guide_x       = 12.5;
+front_guide_x      = deck_front - 1;      // matches guide_flag_mount()'s placement, below
+guide_spacing      = front_guide_x - rear_guide_x;
+
+// Chord-vs-arc mismatch for two independently-pivoting points rigidly
+// separated by guide_spacing, both riding the same curve of radius
+// r_worst_mm — this is what would force one guide against its slot wall if
+// it exceeded guide_clearance_mm. (NOT the same as the larger sagitta a
+// rigid, non-pivoting structural member would see over the same span — no
+// such member exists here, only the two pivoting pins themselves reach
+// into the slot.)
+chord_arc_mismatch_mm = pow(guide_spacing, 3) / (24 * pow(r_worst_mm, 2));
+
+echo(str("guide spacing (front pivot to rear pivot) = ", guide_spacing, " mm"));
+echo(str("worst-case chord/arc mismatch @ r=", r_worst_mm, "mm = ", chord_arc_mismatch_mm,
+    " mm (", chord_arc_mismatch_mm / guide_clearance_mm * 100, "% of ", guide_clearance_mm, "mm budget) ",
+    chord_arc_mismatch_mm > guide_clearance_mm ? "*** EXCEEDS BUDGET -- shorten guide_spacing or re-check r_worst_mm ***" : "(OK, comfortable margin)"));
+
 module deck() {
     // Constant-width rear section at the spine width (mates with the
     // rear splice), then flares out to front_track_width so the skids
@@ -175,6 +215,20 @@ module ir_mount() {
         color("Crimson") cube([ir_l, ir_w, ir_module_h]);
 }
 
+module rear_guide_mount() {
+    // Second, dummy guide (DESIGN.md §7) — a hard plastic pin, no wiring,
+    // free to pivot in its mount (NOT glued solid — same rule as the front
+    // guide flag). Positioned to bracket the PMW3360 (at pmw_x) between the
+    // two guides.
+    boss_d = rear_guide_pin_dia + 2;  // tight clearance to the rear_splice()/pico_mount() gap -- see rear_guide_x
+    translate([rear_guide_x, 0, skid_h])
+        difference() {
+            cylinder(d = boss_d, h = 5);
+            translate([0, 0, -0.1])
+                cylinder(d = rear_guide_pin_dia + 0.3, h = 5.2);
+        }
+}
+
 module guide_flag_mount() {
     // Placeholder socket for the stock guide-flag pivot peg — MUST
     // preserve the peg's free pivot (DESIGN.md §7); do not glue solid.
@@ -198,4 +252,5 @@ union() {
     pmw_mount();
     ir_mount();
     color("Silver") guide_flag_mount();
+    color("Silver") rear_guide_mount();
 }

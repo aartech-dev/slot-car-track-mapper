@@ -40,9 +40,11 @@ random.seed(42)
 
 SVG_PATH = "tmp/bolton-track.svg"
 OUT_CSV = "sim/expected_track_run.csv"
+FIRMWARE_LOG_CSV = "sim/expected_firmware_log.csv"  # what main.py's own track_log.csv would contain
 
 LAP_LENGTH_MM = 118 * 0.3048 * 1000.0   # 118 ft, as stated for this track
 TARGET_LAP_TIME_S = 12.5                # "12 seconds (or more)"
+N_LAPS = 5                               # matches BRINGUP.md's recommended data-collection run length
 DT_S = 0.010                             # 100 Hz poll rate
 CPI = 3000.0                             # matches pmw3360.py's default
 COUNTS_PER_MM = CPI / 25.4
@@ -263,12 +265,15 @@ def main():
 
     S0 = total_mm - TAPE_OFFSET_BEFORE_STRAIGHT_MM  # tape is 500mm before index 0
 
-    n_ticks = int(lap_time / DT_S) + 2
+    total_run_time = N_LAPS * lap_time
+    n_ticks = int(total_run_time / DT_S) + 2
     rows = []
+    firmware_rows = []  # what main.py's own track_log.csv would contain for this run
     theta_prev = None
     s_prev = None
     x_recon = y_recon = theta_recon = 0.0  # firmware-style reconstruction, for validation
-    lap_count = 0
+    lap = 0
+    lap_end_recon = []
     ir_above = False
     last_lap_ms = -10_000
 
@@ -277,9 +282,14 @@ def main():
 
     for k in range(n_ticks):
         t = k * DT_S
-        if t > lap_time:
+        if t > total_run_time:
             break
-        s_abs = S0 + s_at_time(t, s_grid, t_grid, lap_time, total_mm)
+        t_within_lap = t % lap_time
+        # point_at()/heading_at() already take their argument modulo the
+        # track's own length, so re-using the same S0-relative arc-length
+        # each lap correctly repeats the true path -- only the per-tick
+        # sensor noise differs lap to lap (independent gauss() draws below).
+        s_abs = S0 + s_at_time(t_within_lap, s_grid, t_grid, lap_time, total_mm)
         x_path, y_path = point_at(s_abs, pts_mm, cum)
         heading = heading_at(s_abs, pts_mm, cum)
 
@@ -321,19 +331,24 @@ def main():
         ay_meas = ay_g + gauss(ACCEL_NOISE_RMS_G)
         az_meas = 1.0 + gauss(ACCEL_NOISE_RMS_G)
 
-        in_tape = ((s_abs - S0) % total_mm) < TAPE_WIDTH_MM
+        # d = s_abs - S0 is naturally bounded within [0, total_mm] for this
+        # single simulated lap (s_at_time() never returns outside [0, total_mm],
+        # so no modulo is needed, or possible to get wrong at the boundary).
+        # d near total_mm is the SAME physical tape location as d near 0 --
+        # approached from the other direction, at the end of the lap instead
+        # of the start -- so both ends of the range count as "in tape".
+        d = s_abs - S0
+        in_tape = d < TAPE_WIDTH_MM or d > (total_mm - TAPE_WIDTH_MM)
         ir_val = IR_TAPE_LEVEL + int(gauss(500)) if in_tape else IR_BASELINE + int(gauss(IR_BASELINE_NOISE))
         ir_val = max(0, min(65535, ir_val))
 
         t_ms = round(t * 1000)
-        if ir_val > LAP_THRESHOLD and not ir_above and (t_ms - last_lap_ms) > 1000:
-            ir_above = True
-            last_lap_ms = t_ms
-            lap_count += 1
-        elif ir_val <= LAP_THRESHOLD:
-            ir_above = False
 
-        # --- firmware-style reconstruction from the noisy sensor columns, for validation ---
+        # --- firmware-style reconstruction from the noisy sensor columns, for
+        # validation, in the SAME order main.py does it: integrate heading,
+        # apply the lever-arm correction, rotate+accumulate, THEN check the
+        # lap marker and reset -- so a crossing on this tick still gets this
+        # tick's own translation before (x,y) resets to (0,0). ---
         dtheta_recon = math.radians(gz_dps_meas) * DT_S
         theta_recon += dtheta_recon
         dx_pivot_r = pmw_dx / COUNTS_PER_MM
@@ -341,6 +356,20 @@ def main():
         ct, st = math.cos(theta_recon), math.sin(theta_recon)
         x_recon += dx_pivot_r * ct - dy_pivot_r * st
         y_recon += dx_pivot_r * st + dy_pivot_r * ct
+
+        if ir_val > LAP_THRESHOLD and not ir_above and (t_ms - last_lap_ms) > 1000:
+            ir_above = True
+            last_lap_ms = t_ms
+            lap += 1
+            lap_end_recon.append((x_recon, y_recon))  # drift accumulated over the *completed* lap, before reset
+            x_recon = y_recon = 0.0
+        elif ir_val <= LAP_THRESHOLD:
+            ir_above = False
+
+        firmware_rows.append(dict(
+            t_ms=t_ms, x_mm=round(x_recon, 2), y_mm=round(y_recon, 2),
+            theta_rad=round(theta_recon, 4), lap=lap,
+        ))
 
         rows.append(dict(
             t_ms=t_ms,
@@ -358,6 +387,11 @@ def main():
         w.writeheader()
         w.writerows(rows)
 
+    with open(FIRMWARE_LOG_CSV, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(firmware_rows[0].keys()))
+        w.writeheader()
+        w.writerows(firmware_rows)
+
     # main.py's (x,y) frame has its own x-axis aligned to the car's *initial*
     # heading (DESIGN.md SS6), not the world/SVG's absolute X axis -- rotate
     # the reconstructed endpoint into the world frame before comparing, or
@@ -366,7 +400,11 @@ def main():
     # divergence for what should be a small drift).
     heading0 = math.radians(rows[0]["gt_heading_deg"])
     ch0, sh0 = math.cos(heading0), math.sin(heading0)
-    rx, ry = rows[-1]["recon_x_mm"], rows[-1]["recon_y_mm"]
+    # x_recon/y_recon reset to (0,0) at each detected lap crossing (mirroring
+    # main.py), so by the last row they reflect the *new* lap's near-zero
+    # start, not the drift accumulated over the completed lap -- use the
+    # captured pre-reset value for the just-completed lap instead.
+    rx, ry = lap_end_recon[-1] if len(lap_end_recon) > 1 else (rows[-1]["recon_x_mm"], rows[-1]["recon_y_mm"])
     recon_world_x = rx * ch0 - ry * sh0
     recon_world_y = rx * sh0 + ry * ch0
     dx_err = recon_world_x - (rows[-1]["gt_x_mm"] - rows[0]["gt_x_mm"])
@@ -383,8 +421,9 @@ def main():
     print("Peak speed after pacing : %.2f m/s" % max(v_final))
     print("Ticks generated         : %d (%d ms)" % (len(rows), rows[-1]["t_ms"]))
     print("Samples with IR > threshold (lap tape hits): %d" % tape_ticks)
-    print("Lap-detector fired      : %d time(s)" % lap_count)
-    print("Reconstructed-vs-ground-truth closing error after 1 lap: %.1f mm" % err_mag)
+    print("Lap-detector fired      : %d time(s)" % lap)
+    print("Firmware-shaped log     : %s" % FIRMWARE_LOG_CSV)
+    print("Reconstructed-vs-ground-truth closing error, last completed lap: %.1f mm" % err_mag)
     print("  (includes a ~750mm heading-synthesis baseline from this script's own windowed")
     print("   heading estimate -- see the HEADING_WINDOW_MM caveat above -- not just gyro bias)")
 

@@ -52,12 +52,16 @@ GYRO_CAL_MAX_ACCEL_STD_G = 0.03  # stillness check threshold -- tune once the re
 
 LAP_THRESHOLD = 30000    # ADC counts (0-65535) -- PLACEHOLDER, calibrate against the real marker
 LAP_DEBOUNCE_MS = 1000   # ignore retriggers faster than this (DESIGN.md SS6)
-# 2 = a rolling start: place the car ~1m before the tape and get it up to pace
-# before crossing. The 1st crossing zeroes (x,y) and starts the timed lap; the
-# 2nd crossing ends it. Everything logged before the 1st crossing (lap == 0)
-# is the rollout, not the timed lap -- keep it in the CSV (useful for sanity
-# checking approach speed/behavior) but filter it out of any lap-shape analysis.
-LAPS_TO_RECORD = 2
+# 6 = a rolling start (car ~1m before the tape, up to pace before crossing)
+# plus 5 complete timed laps: the 1st crossing zeroes (x,y) and starts lap 1,
+# the 6th crossing ends lap 5 and stops. Everything logged before the 1st
+# crossing (lap == 0) is the rollout, not a timed lap -- keep it in the CSV
+# (useful for sanity checking approach speed/behavior) but filter it out of
+# any lap-shape analysis. 5 laps gives tools/closed_loop_correct.py's
+# --average-out enough independent laps to average down sensor noise
+# (BRINGUP.md's data-collection procedure) -- lower it back to 2 for a quick
+# single-lap check instead.
+LAPS_TO_RECORD = 6
 MAX_RUN_MS = 5 * 60 * 1000  # safety cutoff if the lap sensor never fires
 
 LOG_PATH = "track_log.csv"

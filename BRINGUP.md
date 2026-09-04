@@ -6,7 +6,7 @@ Status: nothing in this build has touched real hardware yet — `DESIGN.md` is t
 
 ## Stage 0 — Prerequisites
 
-**Parts:** Pico 2 W, PMW3360 breakout, ICM-42688-P breakout, IR reflectance module (TCRT5000/QRE1113-class), buck-boost regulator module, supercap, Schottky diodes ×2, resistor for R1, breadboard + jumper wires, USB cable.
+**Parts for the electronics stages below (Stages 1–6):** Pico 2 W, PMW3360 breakout, ICM-42688-P breakout, IR reflectance module (TCRT5000/QRE1113-class), buck-boost regulator module, supercap, Schottky diodes ×2, resistor for R1, breadboard + jumper wires, USB cable — `BOM.md` is the complete, authoritative parts list (electronics, mechanical, consumables, with sourcing status for each) covering the whole build, including the mechanical parts (chassis, fixture material, guide pins, skid material, tape) not needed until Stages 7+.
 
 **Tools:** multimeter (essential). A bench-adjustable DC supply is nice to have for Stage 2, but not required — the analog track controller you already have *is* a variable 0–18V DC source (that's literally its job), so it can double as one with the car disconnected.
 
@@ -164,8 +164,29 @@ Status: nothing in this build has touched real hardware yet — `DESIGN.md` is t
 
 ## Stage 11 — Full data-collection run + validation
 
-**Goal:** the actual deliverable — a real multi-lap run producing a usable track map.
+**Goal:** the actual deliverable — a real multi-lap run producing a usable track map, with the lap length reported in metric units.
 
-**Procedure:** a normal driving run at `LAPS_TO_RECORD` laps (default 3). Pull `track_log.csv` off the board. Plot X vs Y (a quick script or spreadsheet chart is enough for a first look).
+### How to run a data-collection session
 
-**Pass:** the plotted shape resembles the actual track layout, and the per-lap position resets (visible as small discontinuities in the raw log, cleaned up by the reset logic) are small relative to the track's scale — if they're large, heading drift between lap markers is worse than `DESIGN.md` §2/§6 assumed, and the second-marker heading-correction upgrade mentioned there stops being optional.
+1. **Apply the start/finish tape, across *all* lanes at the same cross-section, not just the one being driven.** A 40mm-wide reflective strip laid across the lane (`DESIGN.md` §6's sizing rule — narrower risks the car passing over it between samples and missing the lap entirely; re-check this width once Stage 5/10 have measured the real loop period and approach speed, per the same section). Pick a spot with a short straight or gentle curve on both sides, not right at the apex of a tight corner — it makes consistent, repeatable positioning of the car easier for the next step, and (mapping more than one lane) means every lane's run starts from the same physical line pointed the same approximate direction, which is what lets their separately-recorded vector paths be combined later (`DESIGN.md` §9).
+2. **Place the car on the track roughly 1m before the tape**, sitting in the slot, pointed the right way — a rolling start, so the car is already up to a steady pace by the time it crosses the tape rather than accelerating from a dead stop right on the line.
+3. **Power on and wait for gyro calibration to finish.** `main.py` prints `Calibrating gyro bias -- keep the car perfectly still for 1.5s...` and then a result line — the car must not be touched or moved during this window (`DESIGN.md` §6); if the result says `MOVED -- calibration unreliable`, power-cycle and redo this step before proceeding, since a bad calibration here is worse than none.
+4. **Drive the car across the tape and continue for 5 complete laps** at a steady pace (`LAPS_TO_RECORD = 6` covers the rolling-start crossing plus 5 timed laps — see `main.py`'s comment on that constant). Multiple laps aren't needed for the gyro calibration itself (that already happened once, at rest, in step 3) — they're what `tools/closed_loop_correct.py --average-out` needs to average down the sensor-noise component of map error that per-lap correction alone doesn't reach (`DESIGN.md` §6). The firmware stops itself automatically after the 6th crossing.
+5. **Retrieve `track_log.csv` off the board** before power-cycling it (`mpremote cp :track_log.csv .`, or via Thonny's file browser) — it's the only copy; the Pico's flash isn't otherwise backed up.
+
+### How to post-process the log
+
+6. **Determine `--net-turns` for the real track once** (not per run) by inspecting the driven lane itself: does its own centerline cross itself anywhere, or is it a simple loop? A plain oval, or a lane that merely swaps sides with an *adjacent* lane at a lane-equalizing crossover piece, is `+1.0` (or `-1.0`, depending on direction) — its own path is still a simple loop. Only a lane whose own path genuinely loops back and crosses itself gets a different value (`DESIGN.md` §6 has the full reasoning, and worked this out to `0.0` for the Bolton track's SVG-plan lane used in this project's own simulation — re-derive it for whatever's actually built, since the built track may not match that plan exactly).
+7. **Run the closed-loop correction, with averaging:**
+   ```
+   python3 tools/closed_loop_correct.py track_log.csv --net-turns <value> \
+       -o track_log_corrected.csv --average-out track_log_averaged.csv
+   ```
+   This prints each lap's corrected length in meters, then a summary line like `Lap length: mean 36.349 m over 5 lap(s) (min 36.324, max 36.356, spread 0.032 m)` — **that mean is the measured lap length**, and a small spread relative to the mean is itself a useful sanity check (real, physical measurement noise from an actual run will be larger than this project's simulation shows, so judge it by whether it's small *relative to the track's scale*, not against the simulated figure specifically). Treat `track_log_averaged.csv`'s own length figure as a smoothed map shape for visualization, not a more authoritative length source — see the tool's `--average-out` help text for why.
+8. **Plot it:**
+   ```
+   python3 tools/plot_track_csv.py track_log_corrected.csv
+   ```
+   Open the resulting `.svg` in a browser.
+
+**Pass:** the plotted shape resembles the actual track layout; the reported lap length is close to the track's known/expected length if there is one to compare against (or at least plausible for its physical size); and the per-lap length spread from step 7 is small relative to the mean. If the spread is large, or the plotted per-lap shapes visibly disagree with each other, heading drift is worse than `DESIGN.md` §2/§6's simulation assumed, and the second-marker heading-correction upgrade mentioned there stops being optional.
