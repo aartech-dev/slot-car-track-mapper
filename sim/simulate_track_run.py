@@ -49,7 +49,7 @@ COUNTS_PER_MM = CPI / 25.4
 LEVER_ARM_MM = 18.0                      # matches main.py
 
 TAPE_OFFSET_BEFORE_STRAIGHT_MM = 500.0   # "about half a meter from the start of the long straight"
-TAPE_WIDTH_MM = 12.0                     # assumed width of the reflective start/finish tape
+TAPE_WIDTH_MM = 40.0                     # DESIGN.md SS6's lap-detection sizing recommendation
 WANDER_AMPLITUDE_MM = 1.5                # slot width 4mm, guide ~1mm -> +-1.5mm play
 WANDER_WAVELENGTH_MM = 300.0             # assumed guide-chatter spatial period
 

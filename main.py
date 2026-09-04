@@ -52,7 +52,12 @@ GYRO_CAL_MAX_ACCEL_STD_G = 0.03  # stillness check threshold -- tune once the re
 
 LAP_THRESHOLD = 30000    # ADC counts (0-65535) -- PLACEHOLDER, calibrate against the real marker
 LAP_DEBOUNCE_MS = 1000   # ignore retriggers faster than this (DESIGN.md SS6)
-LAPS_TO_RECORD = 3
+# 2 = a rolling start: place the car ~1m before the tape and get it up to pace
+# before crossing. The 1st crossing zeroes (x,y) and starts the timed lap; the
+# 2nd crossing ends it. Everything logged before the 1st crossing (lap == 0)
+# is the rollout, not the timed lap -- keep it in the CSV (useful for sanity
+# checking approach speed/behavior) but filter it out of any lap-shape analysis.
+LAPS_TO_RECORD = 2
 MAX_RUN_MS = 5 * 60 * 1000  # safety cutoff if the lap sensor never fires
 
 LOG_PATH = "track_log.csv"

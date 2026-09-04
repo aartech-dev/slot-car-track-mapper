@@ -180,6 +180,12 @@ Active-IR reflectance (emits and reads its own reflected IR) is immune to ambien
 
 **Debounce:** ignore any trigger occurring less than some fraction of the expected lap time since the last one, so a wide/uneven marker edge or a bounce doesn't double-fire the correction.
 
+**Tape width — size it to the sampling, not just to "wide enough to see":** `main.py`'s loop is unthrottled (no `sleep()`), so its real sample period is whatever SPI+I2C+math+logging overhead works out to on real hardware — not yet measured (§8). `sim/simulate_track_run.py`, at its 100Hz assumption and ~3 m/s tape-crossing speed, showed only **1 sample** landing above `LAP_THRESHOLD` with a 12mm tape — a single missed sample (loop jitter, a slightly faster pass) means a missed lap entirely.
+
+The sizing rule: for a loop sampling at period `T` and a car crossing at speed `v`, any tape narrower than `v·T` (in the direction of travel) can fall entirely between two samples and be missed outright; `2·v·T` guarantees at least one sample with some margin either side of exact alignment. E.g. at `v`=3–6 m/s and an assumed `T`=10ms (100Hz, itself unverified — see above): 30–60mm for a bare guarantee, 60–120mm for margin.
+
+**Recommendation: start with a 40mm-wide tape strip** (re-confirmed against `sim/simulate_track_run.py`, which now catches 2 samples at its simulated pace with this width) as a practical starting point, and revisit against the *measured* loop period once real hardware timing is in hand (§8) — narrower is fine if the real loop turns out faster than 100Hz, wider is needed if slower. Driving a controlled, less-than-flat-out pace specifically across the line (lower `v` at the crossing) directly buys the same margin as a wider tape, per the same formula, and costs nothing to try first.
+
 ## 7. Fixture: donor chassis conversion
 
 **Donor:** Scaleauto HS-124 Universal Complete Chassis (plastic, sidewinder, variable wheelbase 96–114mm). Measured on the chassis in hand: wheelbase 114.25mm, rear track width (outside-to-outside) 80.72mm, front track width (outside-to-outside) 77.83mm, main chassis spine width 55mm, V score-line to (former) front axle centerline 47mm, front axle centerline to guide-flag tip 18mm, spine plastic thickness at the cut face 3.6mm, guide-flag pivot peg 3.8mm diameter × 7mm engagement depth. Sidewinder layout: motor mounted along the chassis's long axis driving the rear axle through a pinion/spur gear pair; guide flag at the front doubles as the mechanical slot-engagement piece *and* the power pickup (its braids feed two wires running the full chassis length back to the motor terminals).
@@ -215,7 +221,8 @@ Render previews with e.g. `openscad --autocenter --viewall -o preview.png cad/fi
 
 - Confirm whether this track has a constant-voltage accessory rail (would simplify §4 significantly).
 - Measure/fix the sensor-to-pivot offset **r** once the fixture is machined.
-- Apply the start/finish marker to the track and record its true (X₀, Y₀) as the mapping origin.
+- Apply the start/finish marker to the track and record its true (X₀, Y₀) as the mapping origin. Start with a 40mm-wide tape strip (§6's sizing rule) and re-check it once the real loop period and approach speed are measured.
+- Measure `main.py`'s actual achieved loop period on real hardware (it's unthrottled — no `sleep()` — so this is currently unknown, not just uncalibrated) and re-run §6's tape-width sizing formula against the real number.
 - Measure real logic-rail current draw on the built fixture and size the supercap (§4) from it rather than the rough estimate.
 - Source PMW3360, ICM-42688-P, IR reflectance sensor, Pico 2 W, and buck-boost regulator/supercap parts and confirm they all physically fit the 1/24 fixture footprint.
 - Confirm the real Pico 2 W board's GPIO pin numbering matches the RP2040 `RaspberryPi_Pico` library symbol used in the schematic (§3 addendum) and now hard-coded in `main.py`.
