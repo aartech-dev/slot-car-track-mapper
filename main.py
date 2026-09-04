@@ -16,6 +16,12 @@ the output:
     the car by hand and push it straight forward by hand to confirm
     theta and (dx, dy) move the way this file assumes before trusting a
     real run (see the fusion loop below for the assumed convention).
+
+Gyro bias is measured automatically at the start of every run (see
+calibrate_gyro_bias() and DESIGN.md SS6) -- keep the car completely still
+during the "Calibrating gyro bias" prompt printed at startup. This corrects
+the dominant, systematic drift term (see DESIGN.md SS6 for why it matters);
+it does not chase bias that wanders over the course of a long run.
 """
 
 import time
@@ -41,6 +47,9 @@ IR_ADC_PIN = 26
 # fixture CAD (DESIGN.md SS2, SS7) -- re-measure if the layout changes.
 LEVER_ARM_MM = 18.0
 
+GYRO_CAL_DURATION_MS = 1500     # DESIGN.md SS6 -- measured fresh every run, not cached across power cycles
+GYRO_CAL_MAX_ACCEL_STD_G = 0.03  # stillness check threshold -- tune once the real accelerometer noise floor is known
+
 LAP_THRESHOLD = 30000    # ADC counts (0-65535) -- PLACEHOLDER, calibrate against the real marker
 LAP_DEBOUNCE_MS = 1000   # ignore retriggers faster than this (DESIGN.md SS6)
 LAPS_TO_RECORD = 3
@@ -48,6 +57,50 @@ MAX_RUN_MS = 5 * 60 * 1000  # safety cutoff if the lap sensor never fires
 
 LOG_PATH = "track_log.csv"
 FLUSH_EVERY = 50  # samples between flushes, so a mid-run brownout loses at most this many
+
+
+def calibrate_gyro_bias(icm, duration_ms=GYRO_CAL_DURATION_MS):
+    """Average the stationary gyro Z reading to find its static bias
+    (DESIGN.md SS6) -- a modest, realistic 0.3 dps bias, uncorrected, was
+    enough to produce roughly a meter of reconstructed-position error over a
+    single 12.5s lap in sim/simulate_track_run.py. Also checks accelerometer
+    variance over the same window so a bias measured while the car was being
+    moved -- worse than no calibration at all -- is at least detectable.
+
+    Returns (gz_bias_dps, was_still).
+    """
+    print("Calibrating gyro bias -- keep the car perfectly still for %.1fs..." % (duration_ms / 1000))
+    start_ms = time.ticks_ms()
+    n = 0
+    gz_sum = 0.0
+    ax_sum = ay_sum = az_sum = 0.0
+    ax_sq_sum = ay_sq_sum = az_sq_sum = 0.0
+
+    while time.ticks_diff(time.ticks_ms(), start_ms) < duration_ms:
+        ax, ay, az = icm.read_accel_g()
+        _, _, gz = icm.read_gyro_dps()
+        gz_sum += gz
+        ax_sum += ax
+        ay_sum += ay
+        az_sum += az
+        ax_sq_sum += ax * ax
+        ay_sq_sum += ay * ay
+        az_sq_sum += az * az
+        n += 1
+
+    if n == 0:
+        raise RuntimeError("Gyro calibration got no samples -- check IMU wiring")
+
+    gz_bias = gz_sum / n
+    ax_var = ax_sq_sum / n - (ax_sum / n) ** 2
+    ay_var = ay_sq_sum / n - (ay_sum / n) ** 2
+    az_var = az_sq_sum / n - (az_sum / n) ** 2
+    accel_std = math.sqrt(max(0.0, ax_var + ay_var + az_var))
+
+    was_still = accel_std < GYRO_CAL_MAX_ACCEL_STD_G
+    print("Gyro bias = %.4f dps (n=%d samples), accel std = %.4f g (%s)"
+          % (gz_bias, n, accel_std, "still" if was_still else "MOVED -- calibration unreliable"))
+    return gz_bias, was_still
 
 
 def run():
@@ -65,6 +118,10 @@ def run():
     print("ICM-42688-P OK: WHO_AM_I=0x%02x" % who)
 
     ir = ADC(Pin(IR_ADC_PIN))
+
+    gz_bias, gyro_cal_ok = calibrate_gyro_bias(icm)
+    if not gyro_cal_ok:
+        print("WARNING: car moved during gyro calibration -- heading will drift faster than DESIGN.md SS6 expects.")
 
     x = 0.0
     y = 0.0
@@ -93,6 +150,7 @@ def run():
             t_prev = t_now
 
             _, _, gz_dps = icm.read_gyro_dps()
+            gz_dps -= gz_bias  # DESIGN.md SS6 -- remove the static bias measured at startup
             gz_rad_s = math.radians(gz_dps)
             dtheta = gz_rad_s * dt
             theta += dtheta
