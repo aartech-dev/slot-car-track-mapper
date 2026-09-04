@@ -58,7 +58,7 @@ Implications:
 - A simple buck regulator won't work across the whole range — it can't produce 3.3/5 V once the input sags below its dropout, which will happen exactly when the car is slow or stopped.
 - A **buck-boost** regulator (e.g. TI TPS63070-class, ~0.9–18 V in) extends the usable range down much further, but still has a floor near true 0 V.
 - Below that floor, only stored energy keeps the electronics alive.
-- Cheap first check worth doing before building anything: some analog 4-rail track systems carry a separate constant-voltage accessory/lighting supply (for car headlights) independent of the throttle rail. If this track has one, tapping it sidesteps the whole problem.
+- No shortcut via a separate accessory rail: slot car tracks never carry a third, constant-voltage rail alongside the two throttle rails — cars with lights or other accessories run them off the same variable throttle rail, not an independent supply. So the buck-boost + supercap design below is the actual answer to this problem, not a fallback for when a nonexistent easier option isn't available.
 - Include basic input protection (reverse-polarity diode / small TVS) regardless of source — pickup shoes can momentarily bridge or reverse polarity on crashes/spin-outs.
 
 ### Energy buffer: supercapacitor (selected)
@@ -241,7 +241,6 @@ Render previews with e.g. `openscad --autocenter --viewall -o preview.png cad/fi
 
 ## 8. Open items before build
 
-- Confirm whether this track has a constant-voltage accessory rail (would simplify §4 significantly).
 - Measure/fix the sensor-to-pivot offset **r** once the fixture is machined.
 - Apply the start/finish marker to the track and record its true (X₀, Y₀) as the mapping origin. Start with a 40mm-wide tape strip (§6's sizing rule) and re-check it once the real loop period and approach speed are measured.
 - Measure `main.py`'s actual achieved loop period on real hardware (it's unthrottled — no `sleep()` — so this is currently unknown, not just uncalibrated) and re-run §6's tape-width sizing formula against the real number.
