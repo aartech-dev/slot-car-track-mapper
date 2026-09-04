@@ -358,8 +358,19 @@ def main():
         w.writeheader()
         w.writerows(rows)
 
-    dx_err = rows[-1]["recon_x_mm"] - rows[-1]["gt_x_mm"] + rows[0]["gt_x_mm"]
-    dy_err = rows[-1]["recon_y_mm"] - rows[-1]["gt_y_mm"] + rows[0]["gt_y_mm"]
+    # main.py's (x,y) frame has its own x-axis aligned to the car's *initial*
+    # heading (DESIGN.md SS6), not the world/SVG's absolute X axis -- rotate
+    # the reconstructed endpoint into the world frame before comparing, or
+    # this compares two different frames and wildly overstates the error
+    # (caught by tools/plot_track_csv.py showing an implausibly large-looking
+    # divergence for what should be a small drift).
+    heading0 = math.radians(rows[0]["gt_heading_deg"])
+    ch0, sh0 = math.cos(heading0), math.sin(heading0)
+    rx, ry = rows[-1]["recon_x_mm"], rows[-1]["recon_y_mm"]
+    recon_world_x = rx * ch0 - ry * sh0
+    recon_world_y = rx * sh0 + ry * ch0
+    dx_err = recon_world_x - (rows[-1]["gt_x_mm"] - rows[0]["gt_x_mm"])
+    dy_err = recon_world_y - (rows[-1]["gt_y_mm"] - rows[0]["gt_y_mm"])
     err_mag = math.hypot(dx_err, dy_err)
 
     tape_ticks = sum(1 for r in rows if r["ir_adc"] > LAP_THRESHOLD)
