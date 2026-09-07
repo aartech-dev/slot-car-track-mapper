@@ -8,24 +8,34 @@
 // Cut the donor chassis at its molded score line ("the V") in front of
 // the motor box. The rear motor/drive section is kept stock and is NOT
 // modeled here. This part REPLACES the front section: it splices onto
-// the rear stub, carries the guide flag, the Pico 2 W, the PMW3360, the
-// ICM-42688-P, and the IR reflectance lap sensor, and rides on a
-// two-point skid instead of the stock front wheels.
+// the rear stub, carries the guide flag and a shared strip-board PCB
+// (Pico 2 W, PMW3360, ICM-42688-P, and the IR reflectance lap sensor all
+// on one board — see shared_pcb()), and rides on a two-point skid
+// instead of the stock front wheels.
+//
+// This deck IS the PMW3360 datasheet's (tmp/C20612443.pdf) "Customer
+// Supplied Base Plate with Recommended Opening" (Fig. 8) — pmw_lens_pocket()
+// below implements that opening directly. The strip board is the
+// datasheet's "Customer Supplied PCB" (Fig. 5): one hand-cut board wired
+// point-to-point along its copper strips, not four separate breakouts.
 //
 // Units: mm. X=0 at the rear cut face, +X toward the front/guide flag.
 // Y=0 on the car's centerline. Z=0 at the track surface.
 //
 // ---------------------------------------------------------------------
-// STATUS: third pass. All donor-chassis dimensions below are now from
+// STATUS: fourth pass. All donor-chassis dimensions below are now from
 // calipers on the real part (not photo estimates), including the
 // front-of-motor carrier profile (tmp/chassis-front-of-motor.jpeg) that
 // the fixture's rear edge now mirrors — see carrier_interface() below,
 // which replaces the old flat-cube rear_splice() placeholder. The second
 // (rear) guide pin no longer has fixture-side geometry: it uses a small
 // pre-existing hole near the carrier's tab tip instead of a molded boss.
-// Still NOT print-ready: the component footprints (Pico/PMW3360/
-// ICM-42688-P/IR module) are still typical/placeholder values — verify
-// those against the actual parts bought before printing.
+// Electronics are consolidated onto one shared strip board (shared_pcb())
+// rather than mounted individually. Still NOT print-ready: the ICM-42688-P
+// footprint is still a typical/placeholder value, the PMW3360 lens pocket
+// is a simplified (non-tapered) approximation of Fig. 8's real "D" shape,
+// and the IR sensor's exact part (QRE1113-class assumed, see the
+// component footprints below) still needs confirming.
 // ======================================================================
 
 // ---- MEASURED on the physical chassis (trust these) -------------------
@@ -84,7 +94,7 @@ pico_hole_dx = 47; pico_hole_dy = 17; pico_hole_d = 2.5;    // mount-hole patter
 // guesses. Fig. 4 ("Assembly drawing... distance from lens reference
 // plane to tracking surface") and Fig. 8 ("Recommended Base Plate
 // Opening") describe exactly the joint our deck needs to form — the
-// datasheet's "Base Plate" IS our fixture deck.
+// datasheet's "Base Plate" IS our fixture deck (see header note above).
 pmw_l = 19.00; pmw_w = 21.35;               // Fig. 8 recommended base-plate opening keepout (X/Y — axis
                                               // assignment is a reasonable-not-yet-verified read of the
                                               // drawing; both fit comfortably in our available space either way)
@@ -98,15 +108,42 @@ pmw_base_plate_t = 2.40;                     // Fig. 8 recommended base-plate th
                                               // or the lens flange sits proud and focus distance grows
 pmw_focus_height = 2.40;                     // Fig. 4 "Bottom of Lens Flange to Navigation Surface (Z)" —
                                               // confirms the old "typical" 2.4mm guess was exactly right
-pmw_pcb_standoff = 2.90;                     // Fig. 4 "Gap between PCB & Base Plate" — the sensor PCB (with
-                                              // the lens clipped to its underside, Fig. 5) mounts this far
-                                              // ABOVE the deck's top surface, not hanging below it
-pmw_pcb_t        = 1.60;                     // Fig. 4 PCB thickness
+pmw_pcb_standoff = 2.90;                     // Fig. 4 "Gap between PCB & Base Plate" — the shared strip
+                                              // board (below) mounts this far above the deck's top surface
+pmw_chip_h       = 2.41;                     // Fig. 4 "Top of Chip Package to Navigation Surface" (9.81) minus
+                                              // "Top of PCB to Navigation Surface" (7.40) — visual height only
 
 icm_l = 15; icm_w = 15; icm_t = 3;                         // ICM-42688-P breakout, typical
 
-ir_l = 32; ir_w = 10; ir_module_h = 5;                     // TCRT5000-style reflectance module, typical
-ir_focus_height = 3.0;                                      // typical optimal sensing distance — verify vs. datasheet
+// IR lap sensor — MEASURED from real datasheets (tmp/QRE1113.pdf,
+// tmp/TCRT5000.pdf). Sized as QRE1113 (through-hole, CASE 100AQ: 4.2 x
+// 3.6 x 1.7mm body on long bendable leads) rather than TCRT5000
+// (10.2 x 5.8 x 7mm, per its own datasheet's "Dimensions" line): TCRT5000's
+// 7mm body doesn't fit the available drop (skid_h 9mm minus
+// ir_focus_height 3mm leaves only 6mm of standoff to work with). Use
+// QRE1113 as modeled, or increase skid_h if TCRT5000 is preferred instead.
+ir_l = 4.2; ir_w = 3.6; ir_module_h = 1.7;
+ir_focus_height = 3.0;                                      // QRE1113's collector current peaks near d=1mm (its Fig. 2,
+                                                              // mirror target) and TCRT5000's peak is 2.5mm (its own
+                                                              // datasheet) — 3.0mm is a reasonable working point for either,
+                                                              // not the literal peak; re-tune once real parts are in hand
+
+// ---- Shared strip board — the datasheet's "Customer Supplied PCB" -----
+// (PMW3360 datasheet Fig. 5, "Exploded Assembly View"). One hand-cut
+// strip board (0.1" pitch copper strips) carries the PMW3360, the Pico
+// 2 W, the ICM-42688-P, and the IR lap sensor, wired point-to-point along
+// the strips (including PMW3360-to-Pico-header wiring) instead of as four
+// separate breakouts — see shared_pcb() below.
+board_t      = 1.11;    // measured stock thickness — overrides the datasheet's assumed 1.60mm FR4
+board_gap    = 0.3;     // clearance between adjacent component footprints on the board
+board_margin = 1;       // board edge margin beyond the outermost component
+board_pico_x = pmw_x - 25;                                              // Pico's own zone, clear of PMW/ICM/IR
+board_icm_x  = pmw_x;  board_icm_y = -(pmw_w/2 + icm_w/2 + board_gap);  // shares PMW's X band, offset -Y
+board_ir_x   = pmw_x;  board_ir_y  =   pmw_w/2 + ir_w/2  + board_gap;   // shares PMW's X band, offset +Y
+board_w      = 2 * max(pico_l/2, -(board_icm_y - icm_w/2), board_ir_y + ir_w/2) + 2*board_margin;
+board_x0     = board_pico_x - pico_w/2 - 3;         // board's rear edge
+board_x1     = pmw_x + pmw_l/2 + 3;                 // board's front edge
+board_len    = board_x1 - board_x0;
 
 // ---- Fixture structural parameters -------------------------------------
 deck_t    = 3;    // main deck thickness
@@ -124,6 +161,8 @@ echo(str("lever_arm_r (guide pivot to PMW3360) = ", lever_arm_r, " mm"));
 echo(str("pmw lens pocket: deck_t ", deck_t, "mm - base_plate_t ", pmw_base_plate_t, "mm = ", pmw_pocket_depth,
     "mm counterbore depth ", pmw_pocket_depth < 0 ? "*** NEGATIVE — deck_t must be >= pmw_base_plate_t ***" : "(OK)"));
 echo(str("ir standoff spacer needed = ", standoff_ir, " mm ", standoff_ir < 0 ? "*** NEGATIVE — increase skid_h or use a thinner module ***" : "(OK)"));
+echo(str("shared PCB: ", board_len, "mm x ", board_w, "mm x ", board_t, "mm ",
+    board_w > spine_width ? str("*** EXCEEDS spine_width (", spine_width, "mm) — narrow the layout ***") : "(fits spine_width with margin)"));
 
 $fn = 48;
 
@@ -228,36 +267,6 @@ module skids() {
     skid_pad(-y);
 }
 
-module pico_mount() {
-    // Pico 2 W sits on TOP of the deck, ROTATED 90° so its 51mm long axis
-    // runs ACROSS the deck (Y) instead of along it (X) — even with the
-    // fixture elongated for the carrier interface, the Pico zone between
-    // it and the flare is still narrow. This costs Y-margin instead (51mm
-    // board in a 55mm-wide spine — only ~2mm clearance each side, snug but
-    // workable for a first pass; revisit if the real board+header
-    // footprint needs more).
-    px = (carrier_zone_len + flare_start) / 2;
-    translate([px - pico_w/2, -pico_l/2, skid_h + deck_t])
-        color("ForestGreen") cube([pico_w, pico_l, 1.2]);
-    for (xs = [-1, 1], ys = [-1, 1])
-        translate([px + xs*pico_hole_dy/2, ys*pico_hole_dx/2, skid_h])
-            cylinder(d = pico_hole_d + 3, h = deck_t + 3);
-}
-
-module icm_mount() {
-    // ICM-42688-P sits on top of the deck, in the flare zone where there's
-    // width to spare beside the (now sideways) Pico. Orientation matters
-    // for the fusion loop (DESIGN.md §6) — align its axes to chassis
-    // forward/lateral/vertical when it's actually placed. Offset off the
-    // centerline (rather than centered) so its X range, which overlaps
-    // pmw_lens_pocket()'s, doesn't land on the recessed counterbore —
-    // the pocket only cuts within pmw_w of the centerline.
-    px = flare_start + 8;
-    py = pmw_w/2 + icm_w/2 + 3;
-    translate([px - icm_l/2, py - icm_w/2, skid_h + deck_t])
-        color("Orange") cube([icm_l, icm_w, icm_t]);
-}
-
 module pmw_lens_pocket() {
     // Stepped socket for the LM19-LSI lens (PMW3360 datasheet Fig. 8,
     // "Recommended Base Plate Opening") — SUBTRACTED from the deck, not
@@ -279,22 +288,57 @@ module pmw_lens_pocket() {
     }
 }
 
-module pmw_chip_visual() {
-    // Visual placeholder only, not a mount: the sensor PCB (LM19-LSI lens
-    // clipped to its underside, datasheet Fig. 5) sits pmw_pcb_standoff
-    // ABOVE the deck's top surface, not hanging below it — the lens is
-    // what reaches down, through pmw_lens_pocket() above. The real
-    // assembly also needs the two guide posts from datasheet Fig. 4 to
-    // hold the PCB at that standoff; not modeled here yet.
-    translate([pmw_x - pmw_l/2, -pmw_w/2, skid_h + deck_t + pmw_pcb_standoff])
-        color("RoyalBlue") cube([pmw_l, pmw_w, pmw_pcb_t]);
+module shared_pcb() {
+    // The datasheet's "Customer Supplied PCB" (PMW3360 Fig. 5) — one
+    // strip board mounted pmw_pcb_standoff above the deck's top surface
+    // (Fig. 4's "Gap between PCB & Base Plate"), carrying all four
+    // electronics. Only the PMW3360's lens (pmw_lens_pocket()) and the IR
+    // sensor's bent leads (ir_lead_hole()) reach back down through the
+    // deck below it — everything else stays up here, out of the way. The
+    // real assembly also needs standoff posts (datasheet Fig. 4's "Guide
+    // Post A/B" for the PMW3360's alignment, plus mounting for the rest
+    // of the board) — not modeled here yet.
+    z_board = skid_h + deck_t + pmw_pcb_standoff;
+
+    translate([board_x0, -board_w/2, z_board])
+        color("SaddleBrown") cube([board_len, board_w, board_t]);
+
+    // Pico 2 W — rotated 90°, long axis across the board (same reasoning
+    // as before: the fixture's length budget is tight)
+    translate([board_pico_x - pico_w/2, -pico_l/2, z_board + board_t])
+        color("ForestGreen") cube([pico_w, pico_l, 1.2]);
+
+    // PMW3360 chip package — its lens hangs below through pmw_lens_pocket()
+    translate([pmw_x - pmw_l/2, -pmw_w/2, z_board + board_t])
+        color("RoyalBlue") cube([pmw_l, pmw_w, pmw_chip_h]);
+
+    // ICM-42688-P — orientation matters for the fusion loop (DESIGN.md
+    // §6); align its axes to chassis forward/lateral/vertical when placed
+    translate([board_icm_x - icm_l/2, board_icm_y - icm_w/2, z_board + board_t])
+        color("Orange") cube([icm_l, icm_w, icm_t]);
+
+    // IR sensor solder pads only — the sensing body itself hangs below
+    // the deck on bent leads, see ir_mount() and ir_lead_hole()
+    translate([board_ir_x - ir_l/2, board_ir_y - ir_w/2, z_board + board_t])
+        color("Crimson") cube([ir_l, ir_w, 1]);
 }
 
 module ir_mount() {
-    // IR reflectance lap sensor, alongside the PMW3360, same standoff logic.
-    py = pmw_w/2 + ir_w/2 + 3;
-    translate([pmw_x - ir_l/2, py - ir_w/2, skid_h - standoff_ir - ir_module_h])
+    // IR reflectance lap sensor: solders to shared_pcb() above like
+    // everything else, but its leads are bent so the sensing body hangs
+    // below the deck, through ir_lead_hole(), to reach ir_focus_height.
+    translate([board_ir_x - ir_l/2, board_ir_y - ir_w/2, skid_h - standoff_ir - ir_module_h])
         color("Crimson") cube([ir_l, ir_w, ir_module_h]);
+}
+
+module ir_lead_hole() {
+    // Clearance hole for the IR sensor's bent leads (soldered to
+    // shared_pcb() above) to pass down through the deck to the hanging
+    // sensor body below (ir_mount()) — same idea as pmw_lens_pocket()'s
+    // inner hole, simpler since there's no lens-flange spec for this part.
+    translate([board_ir_x, board_ir_y, skid_h - 0.1])
+        linear_extrude(deck_t + 0.2)
+            square([ir_l + 1, ir_w + 1], center = true);
 }
 
 module guide_flag_mount() {
@@ -316,11 +360,10 @@ difference() {
         color("LightGray") deck();
         color("DimGray") carrier_interface();
         color("Black") skids();
-        pico_mount();
-        icm_mount();
         ir_mount();
         color("Silver") guide_flag_mount();
-        pmw_chip_visual();
+        shared_pcb();
     }
     pmw_lens_pocket();
+    ir_lead_hole();
 }
