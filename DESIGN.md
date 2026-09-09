@@ -29,7 +29,7 @@ The current first-pass CAD layout (§7, `cad/fixture.scad`) places the PMW3360 1
 
 The optical sensor and IMU were chosen over alternatives considered (ADNS-9800 kept for reuse, PAW3395 for raw performance, MPU6050 for ubiquity, BNO085 for onboard fusion) mainly on integration risk vs. payoff at this project's actual requirements — see conversation history for the full comparison if reconsidering later.
 
-**Consequence:** `main.py`'s ADNS-9800 SPI register map and `a6_binary.py`'s extracted SROM firmware are now superseded — they'll be replaced by a PMW3360 driver when firmware work starts, not extended. Leave them in place until then as reference for the general SPI-register bring-up pattern (reset → verify product ID → init → poll), which carries over, along with the pin constants (subject to confirming the Pico 2 W's pinout matches).
+**Consequence:** `main.py`'s ADNS-9800 SPI register map and `a6_binary.py`'s extracted SROM firmware are now superseded, replaced by `pmw3360.py`'s PMW3360 driver — including its own real SROM 0x04 firmware (sourced from SunjunKim/PMW3360, no longer a placeholder). `a6_binary.py` is left in place as a worked reference for the general SPI-register bring-up pattern (reset → verify product ID → init → poll) and the vendor-SROM-to-Python-array conversion technique it demonstrated, both of which carried over, along with the pin constants (subject to confirming the Pico 2 W's pinout matches).
 
 ### Electrical schematic and concrete pin assignments
 
@@ -151,7 +151,7 @@ Implemented in `main.py` (with `pmw3360.py` and `icm42688.py` as the sensor driv
 4. Write (t, X, Y, θ, lap) as a CSV row to flash on every tick, flushed every 50 samples — chosen over "buffer everything, write once at the end" specifically because this project's own power story (§4) means a mid-run brownout is a real, not theoretical, risk; buffering it all in RAM would lose an entire run to a single dropout.
 5. On lap-trigger detection (below), reset accumulated position to (0, 0) — the marker's own location, since that's what defines the origin; heading `θ` is left as-is (the trigger carries no direction information — see below).
 
-Calibration this first pass still needs (not yet possible without hardware in hand): the real PMW3360 SROM firmware (`pmw3360.py` has a zeroed placeholder — see §3's correction), `LAP_THRESHOLD` tuned against the real IR marker's light/dark ADC values, and a by-hand sanity check that the gyro sign and the optical sensor's dx/dy axes match the code's assumed convention (documented at the top of `main.py`) — get any of those three wrong and the map will be systematically distorted in a way that's easy to misattribute to the physics instead.
+Calibration this first pass still needs (not yet possible without hardware in hand): `LAP_THRESHOLD` tuned against the real IR marker's light/dark ADC values, and a by-hand sanity check that the gyro sign and the optical sensor's dx/dy axes match the code's assumed convention (documented at the top of `main.py`) — get either wrong and the map will be systematically distorted in a way that's easy to misattribute to the physics instead. (The PMW3360 SROM firmware is no longer on this list — `pmw3360.py` now has the real SROM 0x04 blob, not a placeholder.)
 
 ### Gyro-bias calibration (at power-up)
 
@@ -247,7 +247,6 @@ Render previews with e.g. `openscad --autocenter --viewall -o preview.png cad/fi
 - Measure real logic-rail current draw on the built fixture and size the supercap (§4) from it rather than the rough estimate.
 - Source PMW3360, ICM-42688-P, IR reflectance sensor, Pico 2 W, and buck-boost regulator/supercap parts and confirm they all physically fit the 1/24 fixture footprint.
 - Confirm the real Pico 2 W board's GPIO pin numbering matches the RP2040 `RaspberryPi_Pico` library symbol used in the schematic (§3 addendum) and now hard-coded in `main.py`.
-- Source the real PMW3360 SROM firmware and replace `pmw3360.py`'s placeholder (§3's correction, §6) — nothing optical will work correctly until this is done.
 - Run `main.py` on real hardware for the first time and work through its documented calibration steps: `LAP_THRESHOLD` against the actual IR marker, the gyro-sign/optical-axis sanity checks, and confirm `calibrate_gyro_bias()`'s stillness threshold (`GYRO_CAL_MAX_ACCEL_STD_G`) against the real accelerometer's noise floor (§6).
 - Calibrate the PMW3360's actual CPI-to-distance conversion by rolling a known distance, rather than trusting the nominal CPI setting in `pmw3360.py`.
 - Get the actual PMW3360, ICM-42688-P, and IR reflectance breakout boards and replace `cad/fixture.scad`'s typical/placeholder footprint dimensions with real ones (donor-chassis dimensions are now measured — this is the remaining unverified category).
