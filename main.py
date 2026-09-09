@@ -7,8 +7,6 @@ below come from.
 
 NOT YET TESTED ON REAL HARDWARE. Known calibration steps before trusting
 the output:
-  - PMW3360.SROM_FIRMWARE is a placeholder (see pmw3360.py) -- the sensor
-    will not track correctly, or at all, until real firmware bytes are in.
   - LAP_THRESHOLD is a guess -- print ir.read_u16() while passing the real
     marker by hand and set this from the actual light/dark ADC values.
   - Gyro sign/axis and optical dx/dy axis mapping depend on exactly how
