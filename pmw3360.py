@@ -10,6 +10,20 @@ canonical, actively-maintained library this driver's register map and
 timing already follow) -- the same technique a6_binary.py used to embed the
 ADNS-9800's SROM, just already done here. Still not run on real hardware;
 check timing constants before trusting this on a board.
+
+Cross-checked against QMK's PMW33xx driver (qmk/qmk_firmware,
+drivers/sensors/pmw3360.c + pmw33xx_common.c, GPL-2.0-or-later), which is
+deployed on real trackball keyboards using this same sensor. QMK doesn't
+carry the actual SROM byte content in-tree (removed for licensing reasons;
+it's opt-in and keyboard-supplied, from this same SunjunKim/PMW3360 source),
+so it can't byte-diff SROM_FIRMWARE -- but its constants do independently
+corroborate this blob: PMW33XX_FIRMWARE_LENGTH is 4094, matching
+len(SROM_FIRMWARE) here, and its firmware signature {0x42, 0xBD} matches
+EXPECTED_PRODUCT_ID/EXPECTED_INVERSE_PRODUCT_ID below. Its register map
+(pmw3360.h) matches ours address-for-address. Two sequencing details from
+its init(), proven across real hardware, were folded in here: the NCS
+low/high power-up toggle before Power_Up_Reset, and its more conservative
+post-write settle timing (tSCLK-NCS + tSWW/tSWR margins) in _write().
 """
 
 from machine import Pin
@@ -397,9 +411,12 @@ class PMW3360:
     def _write(self, reg, value):
         self.cs.value(0)
         self.spi.write(bytes([reg | 0x80, value]))
-        time.sleep_us(20)
+        # tSCLK-NCS (write) is 35us; tSWW/tSWR settle is another 145us after
+        # NCS release. Matches QMK's pmw33xx_write() margins -- see module
+        # docstring.
+        time.sleep_us(35)
         self.cs.value(1)
-        time.sleep_us(100)
+        time.sleep_us(145)
 
     def _read(self, reg):
         self.cs.value(0)
@@ -431,6 +448,13 @@ class PMW3360:
 
     def begin(self):
         self.cs.value(1)
+        # Power-up NCS toggle: drive NCS low then high before the reset
+        # write. The datasheet doesn't specify a duration; QMK's driver uses
+        # 40us each way in production -- see module docstring.
+        self.cs.value(0)
+        time.sleep_us(40)
+        self.cs.value(1)
+        time.sleep_us(40)
         self._write(REG_POWER_UP_RESET, 0x5A)
         time.sleep_ms(50)
         for reg in (REG_MOTION, REG_DELTA_X_L, REG_DELTA_X_H, REG_DELTA_Y_L, REG_DELTA_Y_H):
